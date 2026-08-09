@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Orders</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="container mt-5">
+
+    <h2 class="mb-4">All Orders</h2>
+
+    <table class="table table-bordered table-striped">
+
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Address</th>
+            <th>Total</th>
+        </tr>
+
+        {% for order in orders %}
+
+        <tr>
+            <td>{{ order['id'] }}</td>
+            <td>{{ order['customer_name'] }}</td>
+            <td>{{ order['email'] }}</td>
+            <td>{{ order['phone'] }}</td>
+            <td>{{ order['address'] }}</td>
+            <td>${{ order['total'] }}</td>
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+</div>
+
+</body>
+</html>
