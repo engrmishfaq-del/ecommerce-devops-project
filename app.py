@@ -3,6 +3,21 @@ import sqlite3
 import os
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+
+        if "user_id" not in session:
+            return redirect("/login")
+
+        if session.get("role") != "admin":
+            return "Access Denied: Admins only!", 403
+
+        return f(*args, **kwargs)
+
+    return decorated_function
 
 app = Flask(__name__)
 app.secret_key = "mysecretkey"
@@ -20,8 +35,6 @@ def home():
     conn = get_db()
     cursor = conn.cursor()
 
-@app.route("/")
-def home():
     cursor.execute("SELECT * FROM products")
     products = cursor.fetchall()
 
@@ -62,7 +75,48 @@ def register():
         return redirect("/login")
 
     return render_template("register.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+
+    if request.method == "POST":
+
+        email = request.form["email"]
+        password = request.form["password"]
+
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            "SELECT * FROM users WHERE email=?",
+            (email,)
+        )
+
+        user = cursor.fetchone()
+        conn.close()
+
+        if user and check_password_hash(user["password"], password):
+
+            session["user_id"] = user["id"]
+            session["user_name"] = user["name"]
+            session["role"] = user["role"]
+
+            if user["role"] == "admin":
+                return redirect("/dashboard")
+
+            return redirect("/")
+
+        return "Invalid email or password!"
+
+    return render_template("login.html")
+@app.route("/logout")
+def logout():
+
+    session.clear()
+
+    return redirect("/")
 @app.route("/add_product", methods=["GET", "POST"])
+@admin_required
 def add_product():
 
     if request.method == "POST":
@@ -90,6 +144,78 @@ def add_product():
         return redirect("/")
 
     return render_template("add_product.html")
+@app.route("/edit_product/<int:id>", methods=["GET", "POST"])
+@admin_required
+def edit_product(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM products WHERE id=?",
+        (id,)
+    )
+
+    product = cursor.fetchone()
+
+    if request.method == "POST":
+
+        name = request.form["name"]
+        price = request.form["price"]
+        description = request.form["description"]
+        category = request.form["category"]
+
+        image = request.files["image"]
+
+        if image and image.filename:
+
+            filename = secure_filename(image.filename)
+
+            image.save(
+                os.path.join(
+                    app.config["UPLOAD_FOLDER"],
+                    filename
+                )
+            )
+
+            cursor.execute("""
+                UPDATE products
+                SET name=?, price=?, description=?, category=?, image=?
+                WHERE id=?
+            """, (
+                name,
+                price,
+                description,
+                category,
+                filename,
+                id
+            ))
+
+        else:
+
+            cursor.execute("""
+                UPDATE products
+                SET name=?, price=?, description=?, category=?
+                WHERE id=?
+            """, (
+                name,
+                price,
+                description,
+                category,
+                id
+            ))
+
+        conn.commit()
+        conn.close()
+
+        return redirect("/products")
+
+    conn.close()
+
+    return render_template(
+        "edit_product.html",
+        product=product
+    )
 @app.route("/products")
 def products():
 
@@ -175,37 +301,8 @@ def categories():
         "categories.html",
         categories=categories
     )
-@app.route("/edit_product/<int:id>", methods=["GET", "POST"])
-def edit_product(id):
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == "POST":
-
-        name = request.form["name"]
-        price = request.form["price"]
-        description = request.form["description"]
-        image = request.form["image"]
-
-        cursor.execute("""
-        UPDATE products
-        SET name=?, price=?, description=?, image=?
-        WHERE id=?
-        """, (name, price, description, image, id))
-
-        conn.commit()
-        conn.close()
-
-        return redirect("/products")
-
-    cursor.execute("SELECT * FROM products WHERE id=?", (id,))
-    product = cursor.fetchone()
-
-    conn.close()
-
-    return render_template("edit_product.html", product=product)
 @app.route("/delete_product/<int:id>")
+@admin_required
 def delete_product(id):
 
     conn = get_db()
@@ -356,10 +453,10 @@ def checkout():
     cursor = conn.cursor()
 
     cursor.execute("""
-    SELECT products.*, cart.quantity
-    FROM cart
-    JOIN products
-    ON cart.product_id = products.id
+        SELECT products.*, cart.quantity
+        FROM cart
+        JOIN products
+        ON cart.product_id = products.id
     """)
 
     cart_items = cursor.fetchall()
@@ -368,20 +465,56 @@ def checkout():
 
     for item in cart_items:
         total += item["price"] * item["quantity"]
+
     if request.method == "POST":
 
         customer_name = request.form["customer_name"]
         email = request.form["email"]
         phone = request.form["phone"]
         address = request.form["address"]
+        payment_method = request.form["payment_method"]
+
+        user_id = session.get("user_id")
+
+        if payment_method == "Demo Card":
+            payment_status = "Paid"
+            transaction_id = "DEMO-" + str(int(total))
+            order_status = "Confirmed"
+        else:
+            payment_status = "Pending"
+            transaction_id = None
+            order_status = "Pending"
 
         cursor.execute("""
-        INSERT INTO orders
-        (customer_name, email, phone, address, total)
-        VALUES (?, ?, ?, ?, ?)
-        """, (customer_name, email, phone, address, total))
+            INSERT INTO orders
+            (
+                customer_name,
+                email,
+                phone,
+                address,
+                total,
+                user_id,
+                status,
+                payment_method,
+                payment_status,
+                transaction_id
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            customer_name,
+            email,
+            phone,
+            address,
+            total,
+            user_id,
+            order_status,
+            payment_method,
+            payment_status,
+            transaction_id
+        ))
 
         conn.commit()
+        conn.close()
 
         return redirect("/")
 
@@ -392,19 +525,85 @@ def checkout():
         cart_items=cart_items,
         total=total
     )
-@app.route("/orders")
-def orders():
+@app.route("/my_orders")
+def my_orders():
+
+    if "user_id" not in session:
+        return redirect("/login")
 
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM orders ORDER BY id DESC")
+    cursor.execute(
+        "SELECT * FROM orders WHERE user_id=? ORDER BY id DESC",
+        (session["user_id"],)
+    )
+
     orders = cursor.fetchall()
 
     conn.close()
 
-    return render_template("orders.html", orders=orders)
+    return render_template("my_orders.html", orders=orders)
+@app.route("/admin/orders")
+@admin_required
+def admin_orders():
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT orders.*, users.name AS user_name
+        FROM orders
+        LEFT JOIN users ON orders.user_id = users.id
+        ORDER BY orders.id DESC
+    """)
+
+    orders = cursor.fetchall()
+
+    conn.close()
+
+    return render_template("admin_orders.html", orders=orders)
+@app.route("/admin/update_order/<int:id>", methods=["GET", "POST"])
+@admin_required
+def admin_update_order(id):
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM orders WHERE id=?",
+        (id,)
+    )
+
+    order = cursor.fetchone()
+
+    if not order:
+        conn.close()
+        return "Order not found"
+
+    if request.method == "POST":
+
+        status = request.form["status"]
+
+        cursor.execute(
+            "UPDATE orders SET status=? WHERE id=?",
+            (status, id)
+        )
+
+        conn.commit()
+        conn.close()
+
+        return redirect("/admin/orders")
+
+    conn.close()
+
+    return render_template(
+        "admin_update_order.html",
+        order=order
+    )
+
 @app.route("/dashboard")
+@admin_required
 def dashboard():
 
     conn = get_db()
@@ -425,14 +624,31 @@ def dashboard():
     if total_revenue is None:
         total_revenue = 0
 
+    # Pending Orders
+    cursor.execute(
+        "SELECT COUNT(*) FROM orders WHERE status = ?",
+        ("Pending",)
+    )
+    pending_orders = cursor.fetchone()[0]
+
+    # Delivered Orders
+    cursor.execute(
+        "SELECT COUNT(*) FROM orders WHERE status = ?",
+        ("Delivered",)
+    )
+    delivered_orders = cursor.fetchone()[0]
+
     conn.close()
 
     return render_template(
         "dashboard.html",
         total_products=total_products,
         total_orders=total_orders,
-        total_revenue=total_revenue
+        total_revenue=total_revenue,
+        pending_orders=pending_orders,
+        delivered_orders=delivered_orders
     )
+       
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

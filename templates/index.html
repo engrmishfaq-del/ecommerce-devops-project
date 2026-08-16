@@ -53,9 +53,29 @@
                     <a class="nav-link" href="/cart">Cart</a>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link" href="/login">Login</a>
-                </li>
+                {% if session.get("user_id") %}
+
+<li class="nav-item">
+    <span class="nav-link">
+        👤 {{ session.get("user_name") }}
+    </span>
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="/logout">Logout</a>
+</li>
+
+{% else %}
+
+<li class="nav-item">
+    <a class="nav-link" href="/login">Login</a>
+</li>
+
+<li class="nav-item">
+    <a class="nav-link" href="/register">Register</a>
+</li>
+
+{% endif %}
 
             </ul>
 

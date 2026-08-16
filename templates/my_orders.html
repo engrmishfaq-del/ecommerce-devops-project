@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Orders</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body>
+
+<div class="container mt-5">
+
+    <h2 class="mb-4">My Orders</h2>
+
+    {% if orders %}
+
+    <table class="table table-bordered table-striped">
+
+        <tr>
+            <th>Order ID</th>
+            <th>Total</th>
+            <th>Status</th>
+        </tr>
+
+        {% for order in orders %}
+
+        <tr>
+            <td>#{{ order['id'] }}</td>
+
+            <td>
+                ${{ order['total'] }}
+            </td>
+
+            <td>
+                {% if order['status'] == 'Pending' %}
+                    <span class="badge bg-warning text-dark">
+                        Pending
+                    </span>
+
+                {% elif order['status'] == 'Confirmed' %}
+                    <span class="badge bg-primary">
+                        Confirmed
+                    </span>
+
+                {% elif order['status'] == 'Delivered' %}
+                    <span class="badge bg-success">
+                        Delivered
+                    </span>
+
+                {% elif order['status'] == 'Cancelled' %}
+                    <span class="badge bg-danger">
+                        Cancelled
+                    </span>
+
+                {% else %}
+                    <span class="badge bg-secondary">
+                        {{ order['status'] }}
+                    </span>
+                {% endif %}
+            </td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+    {% else %}
+
+    <div class="alert alert-info">
+        You have no orders yet.
+    </div>
+
+    {% endif %}
+
+    <a href="/products" class="btn btn-primary">
+        Continue Shopping
+    </a>
+
+    <a href="/" class="btn btn-secondary">
+        Home
+    </a>
+
+</div>
+
+</body>
+</html>

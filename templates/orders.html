@@ -19,6 +19,8 @@
             <th>Phone</th>
             <th>Address</th>
             <th>Total</th>
+            <th>Status</th>
+            <th>Action</th>
         </tr>
 
         {% for order in orders %}
@@ -30,6 +32,14 @@
             <td>{{ order['phone'] }}</td>
             <td>{{ order['address'] }}</td>
             <td>${{ order['total'] }}</td>
+            <td>{{ order['status'] }}</td>
+
+<td>
+    <a href="/update_order/{{ order['id'] }}"
+       class="btn btn-primary btn-sm">
+        Update
+    </a>
+</td>
         </tr>
 
         {% endfor %}
